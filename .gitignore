@@ -1,0 +1,27 @@
+# Environments
+.venv/
+venv/
+env/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Data and Models
+# We keep the processed CSVs and the trained models in this repo for a "ready to use" experience
+# But we ignore the raw cache and local driver logs
+data/raw/
+*.log
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+.gemini/

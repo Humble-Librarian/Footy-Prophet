@@ -1,0 +1,10 @@
+pandas
+numpy
+soccerdata
+lightgbm
+optuna
+torch
+scikit-learn
+scipy
+rich
+joblib
