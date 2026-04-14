@@ -28,14 +28,16 @@ Footy Prophet follows a 4-layer modular architecture:
 
 | Model | Metric | Value |
 |---|---|---|
-| LightGBM (Home Goals) | MAE | _run `python main.py retrain` then `python main.py stats`_ |
-| LightGBM (Away Goals) | MAE | _run retrain to populate_ |
-| PyTorch MLP (Home xG) | MAE | _run retrain to populate_ |
-| PyTorch MLP (Away xG) | MAE | _run retrain to populate_ |
-| Dixon-Coles | Outcome Accuracy | _run retrain to populate_ |
-| Dixon-Coles | Log-Loss | _run retrain to populate_ |
+| LightGBM (Home Goals) | MAE | 0.9601 |
+| LightGBM (Home Goals) | RMSE | 1.2057 |
+| LightGBM (Away Goals) | MAE | 0.8717 |
+| LightGBM (Away Goals) | RMSE | 1.1114 |
+| PyTorch MLP (Home xG) | MAE | 0.6953 |
+| PyTorch MLP (Away xG) | MAE | 0.6196 |
+| Dixon-Coles | Outcome Accuracy | 39.4% |
+| Dixon-Coles | Log-Loss | 1.1876 |
 
-Run `python main.py stats` after training to view all computed metrics.
+> Evaluated on 472 held-out test matches (last 15% of dataset). Last trained: 2026-04-14.
 
 ---
 
