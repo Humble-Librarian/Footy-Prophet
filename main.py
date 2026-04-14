@@ -1,7 +1,9 @@
 import argparse
+import json
 import sys
 from rich.console import Console
 from rich.table import Table
+from pathlib import Path
 
 console = Console()
 
@@ -32,27 +34,54 @@ def run_retrain():
 
 def run_predict(home, away):
     from src.predict import predictor
+    import pandas as pd
 
     with console.status("[bold blue]Loading components...[/]") as status:
         try:
-            import pandas as pd
-            from pathlib import Path
             df = pd.read_csv("data/processed/features_clean.csv", parse_dates=["Date"])
             
-            # Fetch latest home team stats
-            home_matches = df[df["Home"] == home].sort_values("Date")
-            if not home_matches.empty:
-                last_h = home_matches.iloc[-1]
-                h_gf, h_ga, h_xg, h_ppda = last_h["H_roll_gf"], last_h["H_roll_ga"], last_h["H_roll_xg"], last_h["HomePPDA"]
+            # Fetch latest home team rolling form (last 5 matches regardless of H/A)
+            home_all = df[
+                (df["Home"] == home) | (df["Away"] == home)
+            ].sort_values("Date").tail(5)
+
+            if not home_all.empty:
+                h_gf = home_all.apply(
+                    lambda r: r["HomeGoals"] if r["Home"] == home else r["AwayGoals"], axis=1
+                ).mean()
+                h_ga = home_all.apply(
+                    lambda r: r["AwayGoals"] if r["Home"] == home else r["HomeGoals"], axis=1
+                ).mean()
+                h_xg = home_all.apply(
+                    lambda r: r["HomeXG_Final"] if r["Home"] == home else r["AwayXG_Final"], axis=1
+                ).mean()
+                h_ppda = home_all.apply(
+                    lambda r: r["HomePPDA"] if r["Home"] == home else r["AwayPPDA"], axis=1
+                ).mean()
             else:
+                console.print(f"[bold yellow]⚠ Warning: '{home}' not found in dataset. Using league-average fallback values. Prediction reliability is reduced.[/]")
                 h_gf, h_ga, h_xg, h_ppda = 1.5, 1.0, 1.4, 9.0
 
-            # Fetch latest away team stats
-            away_matches = df[df["Away"] == away].sort_values("Date")
-            if not away_matches.empty:
-                last_a = away_matches.iloc[-1]
-                a_gf, a_ga, a_xg, a_ppda = last_a["A_roll_gf"], last_a["A_roll_ga"], last_a["A_roll_xg"], last_a["AwayPPDA"]
+            # Fetch latest away team rolling form (last 5 matches regardless of H/A)
+            away_all = df[
+                (df["Home"] == away) | (df["Away"] == away)
+            ].sort_values("Date").tail(5)
+
+            if not away_all.empty:
+                a_gf = away_all.apply(
+                    lambda r: r["HomeGoals"] if r["Home"] == away else r["AwayGoals"], axis=1
+                ).mean()
+                a_ga = away_all.apply(
+                    lambda r: r["AwayGoals"] if r["Home"] == away else r["HomeGoals"], axis=1
+                ).mean()
+                a_xg = away_all.apply(
+                    lambda r: r["HomeXG_Final"] if r["Home"] == away else r["AwayXG_Final"], axis=1
+                ).mean()
+                a_ppda = away_all.apply(
+                    lambda r: r["HomePPDA"] if r["Home"] == away else r["AwayPPDA"], axis=1
+                ).mean()
             else:
+                console.print(f"[bold yellow]⚠ Warning: '{away}' not found in dataset. Using league-average fallback values. Prediction reliability is reduced.[/]")
                 a_gf, a_ga, a_xg, a_ppda = 1.2, 1.1, 1.3, 10.5
 
             # Fetch Head-to-Head stats
@@ -61,6 +90,7 @@ def run_predict(home, away):
                 last_h2h = h2h.iloc[-1]
                 h2h_hg, h2h_ag, h2h_c = last_h2h["H2H_HomeGoals_Avg"], last_h2h["H2H_AwayGoals_Avg"], last_h2h["H2H_Count"]
             else:
+                console.print(f"[bold yellow]⚠ Warning: No H2H history found for {home} vs {away}. Using league-average H2H fallback.[/]")
                 h2h_hg, h2h_ag, h2h_c = 1.3, 1.1, 5
 
             features = {
@@ -97,17 +127,39 @@ def run_predict(home, away):
     console.print(table)
 
 
+def run_stats():
+    console.print("\n[bold cyan]Model Performance Metrics[/]\n")
+    files = {
+        "LightGBM (Score Predictor)": "models/lgbm_metrics.json",
+        "PyTorch MLP (xG Predictor)": "models/xg_mlp_metrics.json",
+        "Dixon-Coles (Outcome Probs)": "models/dixon_coles_metrics.json",
+    }
+    for model_name, path in files.items():
+        if Path(path).exists():
+            with open(path) as f:
+                m = json.load(f)
+            console.print(f"[bold]{model_name}[/]")
+            for k, v in m.items():
+                console.print(f"  {k}: {v}")
+            console.print()
+        else:
+            console.print(f"[yellow]{model_name}: No metrics found. Run retrain first.[/]\n")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Football Prediction CLI")
+    parser = argparse.ArgumentParser(description="FootProphet — Multi-model Football Prediction CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Re-train Command
-    parser_retrain = subparsers.add_parser("retrain", help="Run the full pipeline to fetch data and train models")
+    subparsers.add_parser("retrain", help="Run the full pipeline to fetch data and train models")
 
     # Predict Command
     parser_predict = subparsers.add_parser("predict", help="Predict an upcoming match")
     parser_predict.add_argument("--home", required=True, help="Home team name")
     parser_predict.add_argument("--away", required=True, help="Away team name")
+
+    # Stats Command
+    subparsers.add_parser("stats", help="Display saved model performance metrics")
 
     args = parser.parse_args()
 
@@ -115,6 +167,8 @@ def main():
         run_retrain()
     elif args.command == "predict":
         run_predict(args.home, args.away)
+    elif args.command == "stats":
+        run_stats()
 
 if __name__ == "__main__":
     main()

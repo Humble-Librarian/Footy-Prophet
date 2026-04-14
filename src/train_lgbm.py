@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
+import json
 import lightgbm as lgb
 import optuna
 import joblib
 from pathlib import Path
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -22,6 +23,7 @@ FEATURE_COLS = [
 
 N_TRIALS = 30  # Reduced slightly for quicker iterative CLI runs
 N_SPLITS = 3
+TEST_RATIO = 0.15  # Hold out last 15% for metrics
 
 def objective(trial, X, y):
     params = {
@@ -55,23 +57,54 @@ def objective(trial, X, y):
 def train_lgbm():
     print("Loading clean dataset for LightGBM...")
     df = pd.read_csv(PROCESSED / "features_clean.csv", parse_dates=["Date"])
-    X = df[FEATURE_COLS]
+    df = df.sort_values("Date")
+
+    # Hold out last TEST_RATIO for evaluation metrics
+    split_idx = int(len(df) * (1 - TEST_RATIO))
+    df_train = df.iloc[:split_idx]
+    df_test = df.iloc[split_idx:]
+
+    X_train_full = df_train[FEATURE_COLS]
+    X_test = df_test[FEATURE_COLS]
+
+    metrics = {"eval_date": str(pd.Timestamp.today().date()), "n_test_matches": len(df_test)}
 
     for target_col, model_name in [("HomeGoals", "lgbm_home"), ("AwayGoals", "lgbm_away")]:
-        y = df[target_col]
+        y_train = df_train[target_col]
+        y_test = df_test[target_col]
+
         print(f"\n=== Optimizing {model_name} ({N_TRIALS} trials) ===")
         # Suppress Optuna convergence prints to keep terminal clean
         study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=42))
-        study.optimize(lambda t: objective(t, X, y), n_trials=N_TRIALS, show_progress_bar=True)
+        study.optimize(lambda t: objective(t, X_train_full, y_train), n_trials=N_TRIALS, show_progress_bar=True)
 
         best = study.best_params
-        print(f"Best MAE: {study.best_value:.4f}")
-        
-        print("Training final full model...")
+        print(f"Best CV MAE: {study.best_value:.4f}")
+
+        # Train final model on full training set with best params
+        print("Training final model on training set...")
         final_model = lgb.LGBMRegressor(**best, verbosity=-1)
-        final_model.fit(X, y)
-        joblib.dump(final_model, MODELS / f"{model_name}.pkl")
+        final_model.fit(X_train_full, y_train)
+
+        # Evaluate on held-out test set
+        preds = final_model.predict(X_test)
+        mae = mean_absolute_error(y_test, preds)
+        rmse = root_mean_squared_error(y_test, preds)
+        prefix = "home_goals" if target_col == "HomeGoals" else "away_goals"
+        metrics[f"{prefix}_mae"] = round(float(mae), 4)
+        metrics[f"{prefix}_rmse"] = round(float(rmse), 4)
+        print(f"Test MAE: {mae:.4f} | Test RMSE: {rmse:.4f}")
+
+        # Retrain on ALL data for the production model
+        print("Retraining on full dataset for production model...")
+        prod_model = lgb.LGBMRegressor(**best, verbosity=-1)
+        prod_model.fit(df[FEATURE_COLS], df[target_col])
+        joblib.dump(prod_model, MODELS / f"{model_name}.pkl")
         print(f"Saved -> models/{model_name}.pkl")
+
+    with open(MODELS / "lgbm_metrics.json", "w") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"Metrics saved -> models/lgbm_metrics.json")
 
 if __name__ == "__main__":
     train_lgbm()

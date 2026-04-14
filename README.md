@@ -1,14 +1,16 @@
-# FootProphet ⚽🔮
+# Footy Prophet ⚽🔮
 
-**FootProphet** is an automated, multi-model football prediction engine designed to forecast match outcomes, expected goals (xG), and final results for the English Premier League and Spanish La Liga. 
+**Footy Prophet** is an automated, multi-model football prediction engine designed to forecast match outcomes, expected goals (xG), and final results for the English Premier League and Spanish La Liga.
 
 Built with a modular Python CLI, it combines state-of-the-art machine learning (LightGBM & PyTorch) with classical statistical modeling (Dixon-Coles) to provide a data-driven edge.
+
+<!-- [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](YOUR_STREAMLIT_URL) -->
 
 ---
 
 ## 🏗️ Architecture
 
-FootProphet follows a 4-layer modular architecture:
+Footy Prophet follows a 4-layer modular architecture:
 
 1.  **Data Layer (`soccerdata` integration)**: Orchestrates automated scraping from FBref and Understat for historical match stats, xG data, and upcoming schedules across 5+ seasons.
 2.  **Feature Layer (Engineering)**: Transforms raw match data into "form" metrics using rolling windows (last 5 games), Head-to-Head (H2H) historical averages, and defensive pressure metrics (PPDA).
@@ -20,22 +22,40 @@ FootProphet follows a 4-layer modular architecture:
 
 ---
 
+## 📈 Model Performance
+
+> Metrics computed on a held-out test set (last 15% of data, not used in training).
+
+| Model | Metric | Value |
+|---|---|---|
+| LightGBM (Home Goals) | MAE | _run `python main.py retrain` then `python main.py stats`_ |
+| LightGBM (Away Goals) | MAE | _run retrain to populate_ |
+| PyTorch MLP (Home xG) | MAE | _run retrain to populate_ |
+| PyTorch MLP (Away xG) | MAE | _run retrain to populate_ |
+| Dixon-Coles | Outcome Accuracy | _run retrain to populate_ |
+| Dixon-Coles | Log-Loss | _run retrain to populate_ |
+
+Run `python main.py stats` after training to view all computed metrics.
+
+---
+
 ## 📁 File Structure
 
 ```bash
-FootProphet/
+Footy-Prophet/
 ├── data/
-│   └── processed/          # Standardized CSVs used for training/inference
-├── models/                 # Pre-trained .pkl and .pt binary files
+│   └── processed/            # Standardized CSVs used for training/inference
+├── models/                   # Pre-trained .pkl and .pt binary files + metrics JSONs
 ├── src/
-│   ├── data_pipeline.py    # Scraping & team-name normalization
+│   ├── data_pipeline.py      # Scraping & team-name normalization
 │   ├── feature_engineering.py # Rolling form & H2H calculations
-│   ├── train_lgbm.py       # Optuna-tuned LightGBM training
-│   ├── train_xg_mlp.py     # PyTorch Neural Network training
-│   ├── train_dixon_coles.py # Statistical MLE distribution solver
-│   └── predict.py          # Unified inference wrapper
-├── main.py                 # CLI Entry Point
-├── requirements.txt        # Project dependencies
+│   ├── train_lgbm.py         # Optuna-tuned LightGBM training + metrics
+│   ├── train_xg_mlp.py       # PyTorch Neural Network training + metrics
+│   ├── train_dixon_coles.py  # Statistical MLE distribution solver + metrics
+│   └── predict.py            # Unified inference wrapper
+├── app.py                    # Streamlit web frontend
+├── main.py                   # CLI Entry Point
+├── requirements.txt          # Pinned project dependencies
 └── README.md
 ```
 
@@ -47,7 +67,8 @@ FootProphet/
 First, create and activate a virtual environment, then install the dependencies:
 ```bash
 python -m venv .venv
-.\.venv\Scripts\activate  # Windows
+.\.venv\Scripts\activate      # Windows
+# source .venv/bin/activate   # macOS/Linux
 pip install -r requirements.txt
 ```
 
@@ -64,11 +85,23 @@ Run a prediction for any team pairing within the supported leagues:
 python main.py predict --home "Chelsea" --away "Arsenal"
 ```
 
+### 4. View Model Stats
+Display the saved performance metrics from the last training run:
+```bash
+python main.py stats
+```
+
+### 5. Launch Streamlit UI (Optional)
+Run the interactive web dashboard locally:
+```bash
+streamlit run app.py
+```
+
 ---
 
 ## 📊 Output Type
 
-FootProphet provides three distinct data points for every prediction:
+Footy Prophet provides three distinct data points for every prediction:
 
 1.  **Predicted Score (Integer)**: The most likely final scoreline (e.g., `2 - 1`) based on regression.
 2.  **Expected Goals (xG)**: The volume and quality of chances expected for each team (e.g., `1.85 - 1.30`) based on deep learning.
@@ -80,21 +113,21 @@ Match Prediction: Chelsea vs Arsenal
 Predicted Score: 2 - 1
 Expected Goals (xG): 1.46 - 1.64
 
-+---------------------------+
-| Outcome     | Probability |
-|-------------+-------------|
-| Chelsea Win | 39.6%       |
-| Draw        | 28.1%       |
-| Arsenal Win | 32.3%       |
-+---------------------------+
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Outcome     ┃ Probability ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ Chelsea Win │ 39.6%       │
+│ Draw        │ 28.1%       │
+│ Arsenal Win │ 32.3%       │
+└─────────────┴─────────────┘
 ```
 
 ---
 
 ## 🛠️ Requirements
-- **Python**: 3.9+
+- **Python**: 3.10+
 - **Hardware**: CPU-friendly (though PyTorch will use CUDA if a GPU is detected).
-- **Core Stacks**: `pandas`, `lightgbm`, `torch`, `optuna`, `soccerdata`, `scipy`.
+- **Core Stacks**: `pandas`, `lightgbm`, `torch`, `optuna`, `soccerdata`, `scipy`, `rich`, `streamlit`.
 
 ---
 *Disclaimer: This tool is for informational/entertainment purposes only. Sports involve high variance, and prediction models should not be used as the sole basis for gambling.*

@@ -1,10 +1,12 @@
 import pandas as pd
 import numpy as np
+import json
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error
 import joblib
 from pathlib import Path
 
@@ -13,7 +15,6 @@ MODELS = Path("models")
 MODELS.mkdir(exist_ok=True)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Training xG MLP on: {DEVICE}")
 
 XG_FEATURES = [
     "H_roll_gf", "H_roll_ga", "H_roll_xg",
@@ -39,6 +40,7 @@ class XGModel(nn.Module):
         return self.net(x)
 
 def train_xg_mlp():
+    print(f"Training xG MLP on: {DEVICE}")
     df = pd.read_csv(PROCESSED / "features_clean.csv", parse_dates=["Date"])
 
     X = df[XG_FEATURES].values.astype(np.float32)
@@ -105,6 +107,27 @@ def train_xg_mlp():
                 break
 
     print(f"Saved -> models/xg_mlp.pt")
+
+    # ── Compute and save test metrics ────────────────────────────────────────
+    model.load_state_dict(torch.load(MODELS / "xg_mlp.pt", map_location=DEVICE, weights_only=True))
+    model.eval()
+    with torch.no_grad():
+        preds = model(torch.tensor(X_val).to(DEVICE)).cpu().numpy()
+
+    home_xg_mae = mean_absolute_error(y_val[:, 0], preds[:, 0])
+    away_xg_mae = mean_absolute_error(y_val[:, 1], preds[:, 1])
+    print(f"Test Home xG MAE: {home_xg_mae:.4f} | Test Away xG MAE: {away_xg_mae:.4f}")
+
+    metrics = {
+        "home_xg_mae": round(float(home_xg_mae), 4),
+        "away_xg_mae": round(float(away_xg_mae), 4),
+        "best_val_mse": round(float(best_val_loss), 4),
+        "eval_date": str(pd.Timestamp.today().date()),
+        "n_test_matches": len(y_val)
+    }
+    with open(MODELS / "xg_mlp_metrics.json", "w") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"Metrics saved -> models/xg_mlp_metrics.json")
 
 if __name__ == "__main__":
     train_xg_mlp()
